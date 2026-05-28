@@ -1,3 +1,5 @@
-flask 
-openai 
-gunicorn 
+Flask
+openai
+gunicorn
+sentence-transformers
+chromadb
