@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>AI美食助手 - 对话</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            background: #f8fafc;
+            overflow: hidden;
+        }
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            max-width: 1024px;
+            margin: 0 auto;
+            padding: 16px 20px 12px 20px;
+            box-sizing: border-box;
+        }
+        .chat-header {
+            flex-shrink: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .card {
+            flex-grow: 1;
+            background: white;
+            border-radius: 24px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+        }
+        #msgList {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 20px;
+            scroll-behavior: smooth;
+            background: #ffffff;
+        }
+        .message-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+            align-items: flex-start;
+        }
+        .message-row.user {
+            flex-direction: row-reverse;
+        }
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            background: #f1f5f9;
+            flex-shrink: 0;
+            color: #334155;
+        }
+        .user .avatar {
+            background: #e0f2fe;
+            color: #0284c7;
+        }
+        .bot .avatar {
+            background: #f1f5f9;
+            color: #0f172a;
+        }
+        .bubble {
+            max-width: 78%;
+            padding: 12px 16px;
+            border-radius: 20px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            color: #1e293b;
+        }
+        .user .bubble {
+            background: #e0f2fe;
+            border: 1px solid #bae6fd;
+            border-top-right-radius: 4px;
+        }
+        .bot .bubble {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-top-left-radius: 4px;
+        }
+        .input-container {
+            flex-shrink: 0;
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            padding: 16px 20px;
+            border-top: 1px solid #e2e8f0;
+            background: white;
+        }
+        .auto-expand-textarea {
+            flex: 1;
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 24px;
+            padding: 10px 16px;
+            color: #1e293b;
+            font-size: 0.9rem;
+            resize: none;
+            overflow-y: hidden;
+            line-height: 1.4;
+            font-family: inherit;
+        }
+        .auto-expand-textarea:focus {
+            outline: none;
+            border-color: #0ea5e9;
+            box-shadow: 0 0 0 2px rgba(14,165,233,0.2);
+        }
+        .send-button {
+            background: linear-gradient(135deg, #0ea5e9, #3b82f6);
+            padding: 10px 20px;
+            border-radius: 24px;
+            font-weight: 500;
+            color: white;
+            transition: opacity 0.2s;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
+            border: none;
+            cursor: pointer;
+        }
+        .send-button:hover { opacity: 0.9; }
+        .send-button:disabled { opacity: 0.5; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="chat-header">
+            <h1 class="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-600 to-blue-600">
+                🤖 AI 美食助手
+            </h1>
+            <a href="/" class="text-sm bg-white border border-gray-300 text-gray-600 hover:bg-gray-100 px-3 py-1.5 rounded-full transition shadow-sm">
+                ← 返回美食地图
+            </a>
+        </div>
+
+        <div class="card">
+            <div id="msgList"></div>
+            <div class="input-container">
+                <textarea id="msgInput" class="auto-expand-textarea" placeholder="输入你的问题... (Shift+Enter 换行，Enter 发送)" rows="1"></textarea>
+                <button id="sendBtn" class="send-button">发送</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM 元素引用
+        const msgList = document.getElementById("msgList");
+        const msgInput = document.getElementById("msgInput");
+        const sendBtn = document.getElementById("sendBtn");
+
+        // 文本域自动增高，限制最大高度150px
+        function autoResizeTextarea() {
+            msgInput.style.height = 'auto';
+            msgInput.style.height = Math.min(msgInput.scrollHeight, 150) + 'px';
+        }
+        msgInput.addEventListener('input', autoResizeTextarea);
+
+        // 简单的 XSS 防护：转义 HTML 特殊字符
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            });
+        }
+
+        // 将纯文本转为 HTML（保留换行）
+        function formatText(text) {
+            if (!text) return '';
+            return escapeHtml(text).replace(/\n/g, '<br>');
+        }
+
+        // 添加一条消息到聊天界面
+        function addMessage(text, isUser) {
+            const messageDiv = document.createElement("div");
+            messageDiv.className = `message-row ${isUser ? 'user' : 'bot'}`;
+            const avatar = document.createElement("div");
+            avatar.className = "avatar";
+            avatar.textContent = isUser ? "👤" : "🤖";
+            const bubble = document.createElement("div");
+            bubble.className = "bubble";
+            bubble.innerHTML = formatText(text);
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(bubble);
+            msgList.appendChild(messageDiv);
+            messageDiv.scrollIntoView({ behavior: "smooth", block: "end" });
+        }
+
+        // 首次加载时显示欢迎语
+        function addWelcomeMessage() {
+            const welcome = `👋 你好！我是你的美食助手，基于 DeepSeek 大模型和你的美食知识库。
+
+你可以问我关于中国各地美食的问题，例如：
+• “成都有什么不辣的小吃？”
+• “上海人均50元左右的特色菜推荐”`;
+            addMessage(welcome, false);
+        }
+
+        // 发送用户消息并调用后端 AI 接口
+        async function sendMessage() {
+            const text = msgInput.value.trim();
+            if (!text) return;
+
+            addMessage(text, true);          // 显示用户消息
+            msgInput.value = "";
+            msgInput.style.height = 'auto';
+            msgInput.disabled = true;
+            sendBtn.disabled = true;
+
+            try {
+                const resp = await fetch("/api/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ question: text })
+                });
+                const data = await resp.json();
+                addMessage(data.answer, false);   // 显示 AI 回复
+            } catch (err) {
+                addMessage("网络错误，请稍后再试。", false);
+            } finally {
+                msgInput.disabled = false;
+                sendBtn.disabled = false;
+                msgInput.focus();
+            }
+        }
+
+        // 绑定发送按钮事件
+        sendBtn.addEventListener("click", sendMessage);
+        // 快捷键：Enter 发送消息，Shift+Enter 换行
+        msgInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // 初始化
+        autoResizeTextarea();
+        addWelcomeMessage();
+    </script>
+</body>
+</html>
